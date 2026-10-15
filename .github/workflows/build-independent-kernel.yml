@@ -1,1 +1,170 @@
+name: Build Fluxmax ISO and publish Release
 
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fluxmax-latest-build-release
+  cancel-in-progress: false
+
+jobs:
+  build-iso:
+    name: Build BIOS/UEFI ISO
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Validate required source/header files
+        run: |
+          bash scripts/check-source-files.sh
+          bash scripts/check-branding.sh
+          bash scripts/check-limine-config.sh limine.conf
+
+      - name: Install ISO tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils make xorriso curl ca-certificates file gh qemu-system-x86
+
+      - name: Download pinned Limine binary bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/limine-binary.tar.gz"
+          curl --fail --location --silent --show-error \
+            https://github.com/Limine-Bootloader/Limine/releases/download/v12.9.3/limine-binary.tar.gz \
+            -o "$archive"
+          printf '%s  %s\n' '9f42fe9ea2e84d71056529969b1d5c24ba9a2287ffcc01bcce58b0ef8aa98b1d' "$archive" | sha256sum --check -
+          bundle="$RUNNER_TEMP/limine-binary"
+          mkdir -p "$bundle"
+          tar -xzf "$archive" -C "$bundle"
+          limine_dir=""
+          while IFS= read -r limine_sys; do
+            candidate="$(dirname "$limine_sys")"
+            if [[ -s "$candidate/limine-bios-cd.bin" && \
+                  -s "$candidate/limine-uefi-cd.bin" && \
+                  -s "$candidate/BOOTX64.EFI" ]]; then
+              limine_dir="$candidate"
+              break
+            fi
+          done < <(find "$bundle" -type f -name limine-bios.sys -print | sort)
+          test -n "$limine_dir" || { echo "No complete Limine bundle directory found: BIOS sys/CD, UEFI CD and BOOTX64.EFI must be siblings." >&2; find "$bundle" -maxdepth 4 -type f -print >&2; exit 1; }
+          # The binary release includes the portable host utility source, but
+          # may not include a prebuilt `limine` executable on Linux. Build it.
+          if ! find "$limine_dir" -type f -name limine -perm /111 -print -quit | grep -q .; then
+            if [[ -f "$limine_dir/Makefile" || -f "$limine_dir/GNUmakefile" || -f "$limine_dir/makefile" ]]; then
+              make -C "$limine_dir"
+            else
+              echo "No Limine host-tool Makefile found beside $limine_sys" >&2
+              find "$bundle" -maxdepth 3 -type f -print >&2
+              exit 1
+            fi
+          fi
+          limine_cli="$(find "$limine_dir" -type f -name limine -print -quit)"
+          test -n "$limine_cli" -a -x "$limine_cli" || { echo "Limine host utility was not built" >&2; exit 1; }
+          echo "Using Limine bundle directory: $limine_dir"
+          echo "Using Limine host utility: $limine_cli"
+          echo "LIMINE_DIR=$limine_dir" >> "$GITHUB_ENV"
+
+      - name: Run host unit tests
+        run: |
+          set -euo pipefail
+          make test
+
+      - name: Build kernel and hybrid ISO
+        run: |
+          set -euo pipefail
+          make clean
+          make check
+          # Guard ELF segments, entry point and Limine request placement before ISO assembly.
+          python3 scripts/check-kernel-elf.py build/kernel.elf
+          nm -n build/kernel.elf | grep -Eq ' [Tt] _start$'
+          entry="$(readelf -h build/kernel.elf | awk '/Entry point address:/ {print $4}')"
+          start="$(nm -n build/kernel.elf | awk '$3 == "_start" {print $1}')"
+          test -n "$start" && test -n "$entry" || { echo "Missing kernel entry point _start" >&2; exit 1; }
+          test "0x$start" = "$entry" || { echo "ELF entry ($entry) does not match _start (0x$start)" >&2; exit 1; }
+          readelf -S build/kernel.elf | grep -q '\.limine_requests'
+          make iso LIMINE_DIR="$LIMINE_DIR"
+          test -s build/Fluxmax-x86_64.iso
+          sha256sum build/Fluxmax-x86_64.iso > build/Fluxmax-x86_64.iso.sha256
+          sha256sum build/kernel.elf > build/kernel.elf.sha256
+          file build/kernel.elf build/Fluxmax-x86_64.iso
+
+      - name: QEMU BIOS smoke test (Realtek RTL8139) and kernel self-tests
+        run: |
+          set -euo pipefail
+          FLUXMAX_QEMU_NIC=rtl8139 FLUXMAX_HTTP_SMOKE=1 bash scripts/qemu-smoke-test.sh build/Fluxmax-x86_64.iso build/qemu-smoke-rtl8139.log
+
+      - name: QEMU BIOS smoke test (Intel E1000) and network/HTTP tests
+        run: |
+          set -euo pipefail
+          FLUXMAX_QEMU_NIC=e1000 FLUXMAX_HTTP_SMOKE=1 bash scripts/qemu-smoke-test.sh build/Fluxmax-x86_64.iso build/qemu-smoke-e1000.log
+
+      - name: Print QEMU diagnostics in the job log (no artifact quota required)
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          for f in build/qemu-smoke-rtl8139.log build/qemu-smoke-rtl8139.log.debugcon.log build/qemu-smoke-rtl8139.log.qemu-trace.log build/qemu-smoke-rtl8139.log.monitor-state.txt build/qemu-smoke-rtl8139.log.http-server.log build/qemu-smoke-e1000.log build/qemu-smoke-e1000.log.debugcon.log build/qemu-smoke-e1000.log.qemu-trace.log build/qemu-smoke-e1000.log.monitor-state.txt build/qemu-smoke-e1000.log.http-server.log; do
+            if [[ -s "$f" ]]; then
+              echo "===== $f (last 120 lines) ====="
+              tail -n 120 "$f"
+            fi
+          done
+          {
+            echo "## Fluxmax QEMU boot diagnosis"
+            echo
+            if grep -aq 'FLUXMAX:SHELL_READY' build/qemu-smoke-rtl8139.log.debugcon.log 2>/dev/null; then
+              echo "- **Stage reached:** kernel initialized and emitted `SHELL_READY`; failure is likely in serial shell interaction or later smoke commands."
+            elif grep -aq 'FLUXMAX:ENTRY' build/qemu-smoke-rtl8139.log.debugcon.log 2>/dev/null; then
+              last_marker="$(grep -ao 'FLUXMAX:[A-Z_]*' build/qemu-smoke-rtl8139.log.debugcon.log | tail -n 1 || true)"
+              echo "- **Stage reached:** kernel entry executed; last early marker: `${last_marker:-unknown}`. Investigate the initialization stage immediately after this marker."
+            elif [[ -s build/qemu-smoke-rtl8139.log ]]; then
+              echo "- **Stage reached:** COM1 produced output but the kernel entry marker is absent. Inspect Limine/BIOS text and QEMU final registers below."
+            else
+              echo "- **Stage reached:** no COM1 text and no kernel-entry marker. The handoff likely did not reach `_start`, or the bootloader/config path was not selected. Inspect `info registers`, `info block`, `info roms`, `info pci`, and the VGA preview."
+            fi
+            echo "- QEMU trace deliberately omits verbose interrupt logging; it keeps CPU resets, guest errors and unimplemented-instruction diagnostics."
+            echo "- No Actions artifact upload is required, so the diagnostics remain available in this job log even when the artifact quota is exhausted."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -s build/qemu-smoke-rtl8139.log.screen.ppm ]]; then
+            echo "VGA screenshot was also rendered as ASCII by qemu-smoke-driver.py above."
+          fi
+
+      - name: Publish ISO to rolling GitHub Release (not Actions artifacts)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: latest-build
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_TAG" "$TARGET_SHA"
+          git push origin "refs/tags/${RELEASE_TAG}" --force
+          notes_file="$RUNNER_TEMP/fluxmax-release-notes.md"
+          {
+            echo "Fluxmax x86_64 development release."
+            echo
+            echo "Source commit: ${TARGET_SHA}"
+            echo "Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            echo "Assets: hybrid BIOS/UEFI ISO, SHA-256 checksum, kernel ELF, kernel checksum."
+            echo
+            echo "This workflow runs host unit tests for IPv4/VFS/FAT32/network/DNS/HTML/HTTP/TCP/window-manager behavior, 14 in-kernel self-tests, and two QEMU BIOS smoke tests. Both NIC paths must pass DHCP, ICMP gateway ping, DNS lookup, and plain-HTTP fetch from a local test server, using RTL8139 and Intel E1000 respectively."
+            echo "This validates a development boot path, not production completeness or compatibility with all hardware."
+            echo "The current system includes initial per-process address spaces, a static ELF64 Ring-3 demo and int 0x80 syscalls, legacy ATA PIO/FAT32 root-file transfers, and an automatically started four-window desktop (System/Files/Network/Web) using the generic 32-bit RGB framebuffer provided by Limine, with optional PS/2 mouse IRQ12 support, cursor, taskbar click targets and title-bar interactions. The QEMU smoke tests require the desktop-start marker and exit it over COM1 before shell checks. The network stack supports polling-mode Intel 8254x/E1000 and Realtek RTL8139 Ethernet paths plus ARP/IPv4/ICMP/UDP/DHCP/DNS and an initial single-connection plain-HTTP client."
+            echo "Native accelerated Intel/AMD/NVIDIA GPU drivers, AHCI/NVMe/USB drivers, general persistent filesystem mounting, robust multi-socket TCP/congestion recovery, TLS/HTTPS, IPv6/Wi-Fi, a full CSS/JavaScript/image-capable browser, Wi-Fi association/firmware support, USB HID mouse support, a general GUI application framework, and production-grade desktop features remain unfinished. The HTTP smoke server is local and deterministic; it does not test HTTPS, public-site compatibility, or all hardware."
+          } > "$notes_file"
+          assets=(build/Fluxmax-x86_64.iso build/Fluxmax-x86_64.iso.sha256 build/kernel.elf build/kernel.elf.sha256)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            gh release edit "$RELEASE_TAG" --title "Fluxmax - Latest ISO Build" --notes-file "$notes_file" --prerelease
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" --title "Fluxmax - Latest ISO Build" --notes-file "$notes_file" --prerelease --target "$TARGET_SHA"
+          fi
+          gh release view "$RELEASE_TAG" --json url --jq .url
