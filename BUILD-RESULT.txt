@@ -1,0 +1,9 @@
+Fluxmax v23 local validation summary
+- make -j8 check user-elf test: PASS
+- 152 host tests: PASS
+- Fluxmax brand check: PASS
+- kernel ELF and Limine configuration checks: PASS
+- Python/Bash syntax checks: PASS
+- prebuilt kernel/user ELF regenerated and checksums refreshed
+- QEMU/xorriso unavailable in authoring environment; ISO and runtime graphics are not verified
+- GNOME is not yet ported to the custom Fluxmax kernel; see GNOME-PORT-ROADMAP_AR.md

@@ -1,0 +1,31 @@
+Fluxmax v16 — تقرير الفحص المحلي
+
+تشخيص الخطأ المرسل من v15:
+- السجل وصل إلى FLUXMAX:SHELL_READY ثم وقع استثناء #GP (vector 0xD) أثناء اختبار التشغيل.
+- مصدر الخلل المؤكد في الكود: struct isr_frame لم يكن يحتوي حقلي RSP وSS، بينما مسار العودة يستخدم iretq في وضع 64-bit. إطار السياق الصناعي للخيوط الجديدة كان لذلك ناقصًا.
+
+إصلاحات v16:
+- إضافة RSP وSS إلى struct isr_frame مع static assertions لأوفستات الحقول وحجم الإطار.
+- تحديث بناء إطارات kernel threads وuser threads لملء حقول IRETQ المطلوبة.
+- بدء خيط النواة مع IF معطلاً حتى يصل task_trampoline إلى نقطة آمنة، ثم تفعيل المقاطعات.
+- إضافة FLUXMAX:TASK_START، وعلامة لفحص رجوع المهمة بصورة غير متوقعة.
+- تحديث prebuilt/kernel.elf وprebuilt/hello-user.elf من شجرة المصدر v16.
+
+النتائج المحلية الفعلية (Linux، GCC 14.2.0):
+- Host unit tests: 19 passed, 0 failed.
+- FAT32 writer tests: 7 passed, 0 failed.
+- Network stack tests: 17 passed, 0 failed.
+- DNS tests: 10 passed, 0 failed.
+- Browser preview tests: 11 passed, 0 failed.
+- HTTP client tests: 13 passed, 0 failed.
+- TCP transport tests: 9 passed, 0 failed.
+- Window manager tests: 18 passed, 0 failed.
+- الإجمالي: 104 اختبار مضيف ناجح.
+- make check: نجح.
+- scripts/check-kernel-elf.py: KERNEL ELF CHECK PASSED.
+- scripts/check-limine-config.sh: نجح.
+- نقطة الدخول ELF = 0xffffffff80000000؛ مقطع .limine_requests يبدأ عند file offset 0x11e000.
+
+القيود:
+- qemu-system-x86_64 وxorriso غير موجودين في بيئة الفحص، لذلك لم يتم إنشاء ISO أو اختبار الإقلاع الفعلي لـ v16 محليًا.
+- النجاح في اختبارات المضيف لا يثبت وحده نجاح التشغيل داخل QEMU. يجب تشغيل GitHub Actions للتحقق من اختفاء #GP وظهور FLUXMAX:TASK_START ثم fluxmax>.

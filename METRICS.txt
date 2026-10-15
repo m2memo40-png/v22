@@ -1,0 +1,9 @@
+Fluxmax v23 source/kernel metrics
+- Kernel target: x86_64, freestanding, static ELF64 ET_EXEC
+- Custom user-facing product name: Fluxmax
+- Build ISO target: build/Fluxmax-x86_64.iso
+- Local host assertions: 152 passed, 0 failed
+- Kernel and user ELF build: passed
+- Branding consistency test: passed
+- Live QEMU/ISO: not tested in authoring environment
+- Actual GNOME compatibility: not implemented; see GNOME-PORT-ROADMAP_AR.md

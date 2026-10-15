@@ -1,0 +1,13 @@
+# Debug-friendly sample. A short timeout allows automatic boot but preserves
+# a visible menu/countdown when diagnosing a failed handoff.
+timeout: 3
+default_entry: 1
+serial: yes
+serial_baudrate: 115200
+verbose: yes
+graphics: yes
+/Fluxmax (experimental x86_64)
+    protocol: limine
+    path: boot():/boot/kernel.elf
+    resolution: 1024x768x32
+    cmdline: console=framebuffer,serial

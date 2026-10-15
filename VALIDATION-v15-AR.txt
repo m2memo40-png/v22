@@ -1,0 +1,20 @@
+Fluxmax v15 — نتيجة الفحص المحلي
+التاريخ: 2026-10-15
+
+الإصلاح:
+- محاذاة .limine_requests إلى حد صفحة 4 KiB مستقلة في linker.ld.
+- إضافة فحص إلى scripts/check-kernel-elf.py لاكتشاف مقاطع PT_LOAD ذات الصلاحيات المختلفة التي تتشارك صفحة 4 KiB.
+
+النتائج:
+- make test: نجاح 104 اختبارًا مضيفًا، دون فشل.
+- make check: نجاح تجميع النواة وفحص خصائص ELF الأساسية.
+- make user-elf: نجاح بناء hello.elf وفحصه.
+- scripts/check-source-files.sh: نجاح.
+- scripts/check-limine-config.sh limine.conf: نجاح.
+- scripts/check-kernel-elf.py build/kernel.elf: نجاح بعد الإصلاح.
+- ELF المبني قبل تغيير linker.ld فشل في الفحص الجديد بسبب مشاركة PT_LOAD للقراءة فقط وآخر للقراءة/الكتابة الصفحة 0xffffffff8011c000، مما يؤكد أن الفحص يلتقط المشكلة التي ظهرت في سجل Limine.
+- بعد التعديل، يبدأ مقطع .limine_requests عند 0xffffffff8011d000؛ وأظهر readelf -lW عدم تعارض صفحات المقاطع المختلفة الصلاحيات.
+
+ما لم يتم اختباره هنا:
+- لم يتم إنشاء ISO محليًا ولم يتم تشغيل إقلاع QEMU حقيقي لأن qemu-system-x86_64 وxorriso غير متوفرين في بيئة الفحص.
+- لذلك لا يُعد هذا التقرير تأكيدًا على نجاح الإقلاع الكامل. يجب تشغيل GitHub Actions والتحقق من اختفاء رسالة Limine ثم ظهور FLUXMAX:ENTRY ووصول الصدفة إلى fluxmax>.

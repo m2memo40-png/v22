@@ -1,0 +1,397 @@
+
+🟢 المرحلة 1: تثبيت الأساس (5,000 – 8,000 سطر)
+الهدف: نواة مستقرة تقدر تبني عليها.
+
+□ GDT + TSS محترم (مش بس اللي Limine بيعمله)
+□ IDT كامل لكل الـ 256 vector
+□ Exception Handlers (Page Fault, GPF, Double Fault) — دي هتنقذك كتير
+□ PIC → APIC (عشان تدعم SMP بعدين)
+□ PIT / HPET للتوقيت الدقيق
+□ Serial Debug Console قوية (log levels)
+□ Panic Screen لما يحصل crash
+□ Memory: VMM (Virtual Memory Manager) — Paging للـ Kernel
+□ Kernel Heap حقيقي (Slab / Buddy Allocator)
+اللي هيشتغل: نواة مستقرة، بتكتشف الأخطاء، وبتديك logs واضحة.
+
+🟢 المرحلة 2: User Mode + Processes (15,000 – 25,000 سطر)
+الهدف: تفصل الكيرنل عن التطبيقات. ده أهم تحول في المشروع كله.
+
+□ Ring 3 setup (GDT entries + sysret/iretq)
+□ Syscall Interface (int 0x80 أو syscall/sysret)
+□ Process structure (PCB, PID, state)
+□ Context Switch حقيقي (kernel threads + user threads)
+□ fork() / exec() / wait() / exit()
+□ ELF64 Loader (يشغل ملفات تنفيذية)
+□ Virtual Memory per process (كل process له address space)
+□ Copy-on-Write (اختياري بس مفيد)
+□ Signals بسيطة (SIGKILL, SIGSEGV, SIGINT)
+□ Scheduler محترم (Round-Robin + Priorities + Sleep/Wake)
+اللي هيشتغل: تشغل برنامج user-mode بسيط، وتعمل fork/exec، وكل process معزول.
+
+⚠️ نصيحة: هنا ابدأ تكتب libc مصغرة بالتوازي.
+
+🟢 المرحلة 3: نظام الملفات (15,000 – 25,000 سطر)
+الهدف: تخزين حقيقي وتنظيم.
+
+□ VFS Layer (يعزل الكيرنل عن نظام الملفات الفعلي)
+□ Block Device Layer (يخلي الأقراص كلها تشتغل بنفس الواجهة)
+□ FAT32 Driver (سهل + portable + يقرأ فلاشات)
+□ ext2 Driver (احترافي وبيتعلم منه)
+□ File Descriptors (open/read/write/close/lseek)
+□ Directories (opendir/readdir/mkdir/rmdir)
+□ Mount Points (/, /mnt, /dev, /proc)
+□ Block Cache (يسرّع القراءة)
+□ /dev filesystem (للأجهزة)
+□ /proc filesystem (معلومات النظام)
+اللي هيشتغل: تقرأ وتكتب ملفات على قرص حقيقي، وتعمل مجلدات، وتـ mount.
+
+🟢 المرحلة 4: Userland + Shell + libc (20,000 – 30,000 سطر)
+الهدف: بيئة استخدام فعلية.
+
+□ libc مصغرة: string.h, stdio.h, stdlib.h, unistd.h, fcntl.h
+□ Shell حقيقي: pipes, redirection, background jobs, variables
+□ Coreutils: ls, cat, cp, mv, rm, mkdir, echo, ps, kill, top, grep, wc
+□ Text Editor: nano-like بسيط
+□ Init system: يشغل خدمات عند البدء
+□ Package manager بسيط (اختياري)
+□ Compiler/Linker: استخدم tcc بدل ما تكتب واحد
+□ Terminal emulator (VT100 escape codes)
+اللي هيشتغل: بيئة شبيهة بـ Unix، تكتب فيها أوامر، وتشغل برامج.
+
+⚠️ ملاحظة: ممكن تستخدم musl libc أو newlib بدل ما تكتب libc من الصفر. توفير ضخم.
+
+🟢 المرحلة 5: Drivers للأجهزة (20,000 – 40,000 سطر)
+الهدف: تشتغل على هاردوير حقيقي.
+
+□ AHCI (SATA) — بدل ATA PIO القديم
+□ NVMe — للأقراص الحديثة
+□ USB Stack: xHCI + HID (كيبورد + ماوس)
+□ PCI/PCIe enumeration
+□ ACPI: power off, reboot, sleep
+□ Network Drivers:
+Intel e1000 / e1000e
+
+VirtIO-Net (لـ QEMU)
+
+Realtek RTL8168/8111
+
+□ Audio: AC'97 أو Intel HDA (اختياري)
+□ RTC (الساعة الحقيقية)
+اللي هيشتغل: النظام يشتغل على لابتوب/PC حقيقي، مش بس QEMU.
+
+🟢 المرحلة 6: الواجهة الرسومية (30,000 – 50,000 سطر)
+الهدف: GUI حقيقي بعد ما كان framebuffer بسيط.
+
+□ Compositor (يدير نوافذ متعددة + layers)
+□ Window Manager (move, resize, snap, workspaces)
+□ Widget Toolkit: buttons, textboxes, lists, menus
+□ Font Rendering: TrueType أو bitmap fonts محترمة
+□ Image Loading: PNG, BMP, JPEG
+□ Input Handling: keyboard shortcuts, mouse gestures
+□ Themes + Icons
+□ File Manager GUI
+□ Settings App
+□ Terminal GUI App
+□ Notifications
+□ Multi-monitor (اختياري)
+اللي هيشتغل: واجهة تشبه Windows 95/2000 أو Haiku — بسيطة وحلوة.
+
+🟢 المرحلة 7: الشبكة الكاملة (20,000 – 40,000 سطر)
+الهدف: TCP/IP حقيقي.
+
+□ Ethernet Layer (موسّع)
+□ ARP (موسّع)
+□ IPv4 + ICMP
+□ UDP (موسّع)
+□ TCP حقيقي (connection states, retransmission, windows)
+□ IPv6 (اختياري)
+□ DNS Resolver كامل
+□ DHCP Client (موسّع)
+□ Sockets API: socket/bind/connect/listen/accept/send/recv
+□ Firewall بسيط (اختياري)
+□ HTTP Client (موسّع)
+□ TLS/HTTPS (استخدم mbedTLS أو BearSSL)
+اللي هيشتغل: تتصل بأي موقع HTTPS، وتعمل sockets.
+
+🟢 المرحلة 8: المتصفح (30,000 – 60,000 سطر)
+الهدف: متصفح حقيقي، مش نصي.
+
+□ HTML Parser
+□ CSS Parser (subset)
+□ DOM Tree
+□ Layout Engine
+□ Render Engine (paint على الـ compositor)
+□ JavaScript Engine: استخدم QuickJS أو Duktape بدل ما تكتب واحد
+□ Images + Fonts
+□ Cookies + Sessions
+□ Bookmarks + History
+□ Tabs
+اللي هيشتغل: متصفح بيفتح مواقع حقيقية (بسيطة).
+
+⚠️ نصيحة: متكتبش JS engine بنفسك — استخدم QuickJS. توفير 100 ألف سطر.
+
+🟢 المرحلة 9: Polishing + Ecosystem (20,000 – 50,000 سطر)
+الهدف: يبقى نظام تستخدمه فعلًا.
+
+□ Package Manager
+□ Installer
+□ Bootloader محترم (بدل ما تعتمد على Limine)
+□ Documentation
+□ SDK + Toolchain
+□ Testing Framework
+□ Debugger (GDB stub)
+□ Profiler
+□ Power Management
+□ Security Hardening
+📊 الإجمالي المتوقع
+المرحلة	السطور
+1. الأساس	8,000
+2. User Mode	25,000
+3. FS	25,000
+4. Userland	30,000
+5. Drivers	40,000
+6. GUI	50,000
+7. Network	40,000
+8. Browser	60,000
+9. Polish	50,000
+الإجمالي	~328,000 سطر
+⏱️ التوقيت الواقعي (لفرد شغال 2-3 ساعات يوميًا)
+المرحلة	الوقت
+1	1-2 شهر
+2	3-6 شهور
+3	2-4 شهور
+4	3-6 شهور
+5	4-8 شهور
+6	6-12 شهر
+7	4-8 شهور
+8	6-12 شهر
+9	مستمر
+الإجمالي	3 – 6 سنين
+🎯 نصائح ذهبية
+متبدأش بالواجهة — ناس كتير بتقع في الفخ ده وتفشل.
+
+كل مرحلة لازم تشتغل قبل ما تدخل اللي بعدها.
+
+استعير من المشاريع المفتوحة — مفيش داعي تعيد اختراع العجلة.
+
+اكتب tests من المرحلة 2.
+
+احتفظ بـ git history نظيف.
+
+خلي عندك QEMU scripts + hardware testing.
+
+متستعجلش — SerenityOS خدت 6 سنين لأول إصدار.
+
+🔥 لو عايز تختصر
+أقصر طريق لهدفك:
+
+xv6 كمرجع للـ processes
+
+ToaruOS كمرجع لـ GUI
+
+SerenityOS كمرجع عام
+
+QuickJS للـ JavaScript
+
+musl للـ libc
+
+mbedTLS للـ TLS
+
+كده تقدر توصل لـ 150-200 ألف سطر بدل 300 ألف.
+
+عايز أبدأ معاك من المرحلة 1 بالتفصيل؟ أقدر أديك خطة أسبوعية وخطوات تنفيذية.
+
+طيب  سوال  كل ده  في الاخر هيبقي في main   واحد  صح
+The user is asking: will all this end up in one main file/function? Good question about architecture.
+
+سؤال ممتاز، وده من أهم الأسئلة المعمارية في المشروع كله.
+
+الإجابة المختصرة
+لأ، مستحيل. اللي عندك دلوقتي كله في main.c (2000 سطر) ده مقبول كنموذج تعليمي، لكن لو المشروع كبر لـ 300 ألف سطر، main.c واحد = كارثة.
+
+ليه؟
+الملف الواحد مش هيتفتح أصلًا — المحرر هيتعلّق.
+
+الـ Compilation هيبقى بطيء جدًا — أي تعديل = إعادة بناء كل حاجة.
+
+مفيش فصل مسؤوليات — كل حاجة بتشوف كل حاجة.
+
+مستحيل يشتغل عليه أكتر من شخص — conflicts كل يوم.
+
+Debugging هيبقى جحيم.
+
+مفيش modularity — مش هتقدر تستبدل جزء أو تختبره لوحده.
+
+الشكل الصح: ملفات كتير + main.c صغير
+kmain() في الآخر هيبقى 20-100 سطر بس، بيعمل حاجة واحدة: يستدعي subsystems بالترتيب. زي:
+
+c
+void kmain(void) {
+    serial_init();
+    gdt_init();
+    idt_init();
+    pmm_init();
+    vmm_init();
+    heap_init();
+    pci_init();
+    drivers_init();
+    scheduler_init();
+    vfs_init();
+    net_init();
+    gui_init();
+    shell_start();
+    for (;;) { idle(); }
+}
+خلاص. كل حاجة تانية في ملفات مستقلة.
+
+التنظيم المتوقع للمشروع
+text
+fluxmax/
+├── boot/
+│   ├── limine.c
+│   └── multiboot.c
+├── arch/x86_64/
+│   ├── gdt.c / gdt.h
+│   ├── idt.c / idt.h
+│   ├── isr.c / isr.h
+│   ├── paging.c / paging.h
+│   ├── syscall.c / syscall.h
+│   ├── context_switch.asm
+│   └── apic.c / apic.h
+├── mm/
+│   ├── pmm.c / pmm.h
+│   ├── vmm.c / vmm.h
+│   ├── heap.c / heap.h
+│   ├── slab.c / slab.h
+│   └── buddy.c / buddy.h
+├── sched/
+│   ├── scheduler.c / scheduler.h
+│   ├── process.c / process.h
+│   ├── thread.c / thread.h
+│   └── signal.c / signal.h
+├── fs/
+│   ├── vfs.c / vfs.h
+│   ├── fat32.c / fat32.h
+│   ├── ext2.c / ext2.h
+│   ├── ramfs.c / ramfs.h
+│   └── devfs.c / devfs.h
+├── drivers/
+│   ├── pci.c
+│   ├── ata.c
+│   ├── ahci.c
+│   ├── nvme.c
+│   ├── keyboard.c
+│   ├── mouse.c
+│   ├── usb/
+│   │   ├── xhci.c
+│   │   └── hid.c
+│   └── net/
+│       ├── rtl8139.c
+│       ├── e1000.c
+│       └── virtio_net.c
+├── net/
+│   ├── ethernet.c
+│   ├── arp.c
+│   ├── ipv4.c
+│   ├── icmp.c
+│   ├── udp.c
+│   ├── tcp.c
+│   ├── dns.c
+│   ├── dhcp.c
+│   ├── socket.c
+│   └── tls.c
+├── gui/
+│   ├── compositor.c
+│   ├── window.c
+│   ├── widget.c
+│   ├── font.c
+│   └── theme.c
+├── browser/
+│   ├── html.c
+│   ├── css.c
+│   ├── dom.c
+│   ├── layout.c
+│   ├── render.c
+│   └── js.c
+├── lib/
+│   ├── string.c / string.h
+│   ├── printf.c / printf.h
+│   ├── list.c / list.h
+│   ├── hashmap.c
+│   └── math.c
+├── kernel/
+│   ├── kmain.c   ← الملف الصغير ده
+│   ├── panic.c
+│   ├── log.c
+│   └── init.c
+├── userland/
+│   ├── libc/
+│   ├── shell/
+│   ├── coreutils/
+│   └── apps/
+├── include/
+│   └── kernel.h
+└── Makefile / CMakeLists.txt
+القواعد الذهبية للتنظيم
+كل subsystem في فولدر — mm, fs, net, drivers, gui, ...
+
+كل ملف .c ليه .h مناظر — التصريحات بس في .h.
+
+مفيش #include "main.h" — كل ملف بيـ include اللي محتاجه بس.
+
+Interfaces واضحة — ملفات subsystems متكلمش بعض مباشرة إلا من خلال APIs معرّفة.
+
+kmain() بيعمل init بس — أي منطق حقيقي في subsystems.
+
+Makefile أو CMake يدير كل حاجة — مش compile يدوي.
+
+Layered architecture:
+
+text
+Userland → Syscalls → Kernel Services → Drivers → Hardware
+مثال حقيقي: لينكس
+لينكس عنده:
+
+~30 مليون سطر
+
+موزعة على ~70,000 ملف
+
+init/main.c عنده بس ~1500 سطر
+
+كل subsystem في مجلد لوحده (mm/, fs/, net/, drivers/, arch/)
+
+يعني حتى لينكس نفسه، "main" صغير جدًا بالنسبة لحجم المشروع.
+
+ليه ده مهم لمشروعك؟
+لو مشروعك كبر وانت لسه كله في ملف واحد:
+
+مش هتقدر تكمل بعد 10-20 ألف سطر
+
+هتعيد كتابة كل حاجة لما تكتشف إن التصميم غلط
+
+هتكره المشروع قبل ما توصل للنص
+
+لذلك من أول 5000 سطر، ابدأ قسّم.
+
+نصيحة عملية
+دلوقتي فورًا: اقسم main.c لملفات:
+
+pmm.c, vfs.c, net.c, gui.c, shell.c
+
+خلي kmain.c صغير
+
+اعمل Makefile يشوف كل ملفات .c تلقائيًا.
+
+اعمل include/ مشترك للـ headers العامة.
+
+كل ملف ≤ 1000 سطر (لو زاد، قسّمه).
+
+الخلاصة
+السؤال	الإجابة
+هل كل المشروع في main.c واحد؟	لأ، مستحيل
+kmain() بتعمل إيه؟	بس تنادي init functions
+كام ملف متوقع؟	مئات لآلاف
+main.c هيبقى كام سطر؟	20-100 سطر
+امتى أبدأ أقسم؟	دلوقتي — متستناش
+يعني إنت دلوقتي في نقطة لازم تقسم فيها الكود. لو كمّلت كده لـ 20 ألف سطر، هتضطر تعيد كتابة كل حاجة من الصفر.
+

@@ -1,0 +1,11 @@
+Fluxmax v19 — نتائج التحقق المحلي
+
+PASS: بناء kernel.elf من ملفات المصدر.
+PASS: اختبارات المضيف 111/111.
+PASS: ELF preflight وفحص نقطة الدخول وLimine requests.
+PASS: فحص limine.conf وlimine.conf.example مع graphics: yes ووضع 32-bit.
+PASS: فحص صياغة Python/Bash.
+
+NOT RUN: إنشاء ISO وتشغيل QEMU؛ الأداتان qemu-system-x86_64 وxorriso غير متاحتين في بيئة التحرير. لهذا لا أعتبر ظهور سطح المكتب في بيئة افتراضية أو على جهاز فعلي مثبتًا بعد. Workflow الخاص بـ GitHub Actions صار يشترط ظهور علامة تشغيل سطح المكتب ثم الخروج بـ q لإكمال اختبارات النواة والشبكة.
+
+تنبيه: تنفيذ الرسوميات هو framebuffer عام بلا تسريع GPU خاص بالشركة. المتصفح الحالي يدعم HTTP العادي وعرض HTML كنص فقط؛ لا يدعم HTTPS أو JavaScript أو CSS أو الصور، ولذلك لا يصلح بعد كنظام يومي بديل عن Windows أو توزيعة Linux مكتملة.

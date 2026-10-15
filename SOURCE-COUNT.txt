@@ -1,0 +1,2 @@
+Fluxmax v23 source inventory (brand migration and GNOME port roadmap)
+Files counted (C/C headers/assembly/Python/shell/Makefile): 124
